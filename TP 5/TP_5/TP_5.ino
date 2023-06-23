@@ -1,5 +1,5 @@
 /*
-
+  Geronimo Martos y Denis Bae
 */
 
 #include <Arduino.h>
@@ -7,9 +7,11 @@
 #include <Firebase_ESP_Client.h>
 #include <Wire.h>
 #include "time.h"
+#include "DHT.h"
 
 // Provide the token generation process info.
 #include "addons/TokenHelper.h"
+
 // Provide the RTDB payload printing info and other helper functions.
 #include "addons/RTDBHelper.h"
 
@@ -37,10 +39,9 @@ String uid;
 
 // Database main path (to be updated in setup with the user UID)
 String databasePath;
+
 // Database child nodes
 String tempPath = "/temperature";
-String humPath = "/humidity";
-String presPath = "/pressure";
 String timePath = "/timestamp";
 
 // Parent Node (to be updated in every loop)
@@ -48,8 +49,13 @@ String parentPath;
 
 int timestamp;
 FirebaseJson json;
-
+long timerDelay = 30000; // 30 segundos
 const char* ntpServer = "pool.ntp.org";
+
+#define DHTPIN 23
+#define DHTTYPE DHT11
+#define TEMP 27
+DHT dht(DHTPIN, DHTTYPE);
 
 float temperature;
 float humidity;
@@ -57,7 +63,7 @@ float pressure;
 
 // Timer variables (send new readings every three minutes)
 unsigned long sendDataPrevMillis = 0;
-unsigned long timerDelay = 180000;
+
 
 
 // Initialize WiFi
@@ -78,14 +84,15 @@ unsigned long getTime() {
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo)) {
     //Serial.println("Failed to obtain time");
-    return(0);
+    return (0);
   }
   time(&now);
   return now;
 }
 
-void setup(){
+void setup() {
   Serial.begin(115200);
+  dht.begin();
 
   // Initialize BME280 sensor
   initWiFi();
@@ -128,10 +135,10 @@ void setup(){
   databasePath = "/UsersData/" + uid + "/readings";
 }
 
-void loop(){
+void loop() {
 
   // Send new readings to database
-  if (Firebase.ready() && (millis() - sendDataPrevMillis > timerDelay || sendDataPrevMillis == 0)){
+  if (Firebase.ready() && (millis() - sendDataPrevMillis > timerDelay || sendDataPrevMillis == 0)) {
     sendDataPrevMillis = millis();
 
     //Get current timestamp
@@ -139,13 +146,11 @@ void loop(){
     Serial.print ("time: ");
     Serial.println (timestamp);
 
-    parentPath= databasePath + "/" + String(timestamp);
+    parentPath = databasePath + "/" + String(timestamp);
 
-    json.set(tempPath.c_str(), String(bme.readTemperature()));
-    json.set(humPath.c_str(), String(bme.readHumidity()));
-    json.set(presPath.c_str(), String(bme.readPressure()/100.0F));
+    json.set(tempPath.c_str(), String(dht.readTemperature()));
     json.set(timePath, String(timestamp));
     Serial.printf("Set json... %s\n", Firebase.RTDB.setJSON(&fbdo, parentPath.c_str(), &json) ? "ok" : fbdo.errorReason().c_str());
-  
 
+  }
 }
